@@ -112,7 +112,7 @@ async def fce(ctx, *args):
     Function that defines the &fce command.
     """
     indices = [0, 1, 4, 7, 6, 10, 9, 11, 12]
-    valid, isFloat, condition, msg = isValidArgs(ctx, args) # sets some indicator variables that will alter the flow of the function
+    valid, isFloat, condition, msg = isValidArgs(ctx, args)  # sets some indicator variables
     if msg == 1:
         await ctx.channel.send('Invalid arguments - please specify the course ID (e.g. \"&fce 21127 2\")')
     elif msg == 2:
@@ -146,7 +146,7 @@ async def fce(ctx, *args):
                 sameSemList.append(row)
         allRows.append(courseList)
 
-    # Restricts to the rows requested
+    # Restricts to the rows requested based on the optional filtering
     if condition == 2 and isFloat:
         newRows = [[row for i, sameSemList in enumerate(courseList) for row in sameSemList if i < int(args[-2]) and float(row[11]) >= (100 * float(args[-1]))] 
         for courseList in allRows]
@@ -164,6 +164,7 @@ async def fce(ctx, *args):
     totalFCEs = []
     totalFCE_hours = 0  # Track total FCE hours for all courses
     course_details = []  # To store each course's formatted output
+    not_found_courses = []  # To store course IDs that are not found
 
     for i, rows in enumerate(newRows):
         totalFCE = 0
@@ -175,31 +176,35 @@ async def fce(ctx, *args):
                 course_name = row[7]  # Get the course name
                 count += 1
         if count == 0:
-            await ctx.channel.send('Course not found: {}'.format(courseIDs[i]))
-            return
+            # If no rows found for this course, store it in the not_found_courses list
+            not_found_courses.append(courseIDs[i])
+            continue
         avg_fce = np.around(totalFCE / count, 1)  # Average FCE for the course
         totalFCEs.append(avg_fce)
         totalFCE_hours += avg_fce  # Add to total FCE hours
 
-        # Format the course output: "XX-XXX (COURSE NAME) = X.X hours/week"
-        formatted_course_id = f"**{courseIDs[i][:2]}-{courseIDs[i][2:]}**"  # Format course ID as XX-XXX
-        course_details.append(f"{formatted_course_id} ({course_name}) = **{avg_fce} hours/week**")
+        # Format the course output: "**XX-XXX** (**COURSE NAME**) = X.X hours/week"
+        formatted_course_id = f"**{courseIDs[i][:2]}-{courseIDs[i][2:]}**"  # Format course ID as **XX-XXX**
+        formatted_course_name = f"**{course_name}**"  # Bold the course name
+        course_details.append(f"{formatted_course_id} ({formatted_course_name}) = {avg_fce} hours/week")
+
+    # If there are any not-found courses, append a message at the top
+    if not_found_courses:
+        not_found_string = ", ".join(not_found_courses)
+        course_details.insert(0, f"Courses {not_found_string} not found in database")
 
     # Add the total FCE line
-    course_details.append(f"Total FCE = **{np.around(totalFCE_hours, 1)} hours/week**")
+    course_details.append(f"Total FCE = {np.around(totalFCE_hours, 1)} hours/week (excludes {', '.join(not_found_courses)} if any)")
     
     # Join all course details and send the final message
     final_response = "\n".join(course_details)
     await ctx.channel.send(final_response)
-
+    
 @client.command(pass_context=True)
 async def course(ctx, courseID):
     """
     Function that defines the &course command.
     """
-    # Since we're no longer using the cmu_course_api, we'll need to find course information
-    # directly from the CSV data. Let's assume we can get the details from the loaded table.
-    
     if isValidCourse(courseID):  # if the courseID is valid, then do all the work
         # Remove hyphen if it exists
         if courseID[2] == "-":
@@ -218,9 +223,9 @@ async def course(ctx, courseID):
         department = course_row[3]
         instructor = course_row[6]
         total_students = course_row[9]
-        response_rate = course_row[10]
-        fce_hours = course_row[11]
-        overall_course_rating = course_row[12]
+        response_rate = course_row[11]
+        fce_hours = course_row[12]
+        overall_course_rating = course_row[-1]
 
         # Create an embed message with the course information
         embed = discord.Embed(title="__**{}**__".format(title), colour=discord.Colour(0xA6192E), description=
